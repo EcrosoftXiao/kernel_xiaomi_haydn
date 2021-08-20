@@ -410,6 +410,8 @@ static void mlme_init_generic_cfg(struct wlan_objmgr_psoc *psoc,
 		cfg_get(psoc, CFG_DFS_CHAN_AGEOUT_TIME);
 	gen->sae_connect_retries =
 		cfg_get(psoc, CFG_SAE_CONNECION_RETRIES);
+	gen->monitor_mode_concurrency =
+		cfg_get(psoc, CFG_MONITOR_MODE_CONCURRENCY);
 }
 
 static void mlme_init_edca_ani_cfg(struct wlan_mlme_edca_params *edca_params)
@@ -2878,7 +2880,6 @@ mlme_get_roam_state(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id)
 
 	mlme_priv = wlan_vdev_mlme_get_ext_hdl(vdev);
 	if (!mlme_priv) {
-		mlme_legacy_err("vdev legacy private object is NULL");
 		wlan_objmgr_vdev_release_ref(vdev, WLAN_MLME_OBJMGR_ID);
 		return WLAN_ROAM_DEINIT;
 	}
