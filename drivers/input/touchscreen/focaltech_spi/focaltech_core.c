@@ -184,6 +184,18 @@ void fts_irq_disable(void)
 	FTS_FUNC_EXIT();
 }
 
+void fts_irq_disable_sync(void)
+{
+	FTS_FUNC_ENTER();
+
+	if (!fts_data->irq_disabled) {
+		disable_irq(fts_data->irq);
+		fts_data->irq_disabled = true;
+	}
+
+	FTS_FUNC_EXIT();
+}
+
 void fts_irq_enable(void)
 {
 	unsigned long irqflags = 0;
@@ -528,10 +540,7 @@ static int fts_input_report_b(struct fts_ts_data *data)
 
 			if ((data->log_level >= 2) ||
 				((1 == data->log_level) && (FTS_TOUCH_DOWN == events[i].flag))) {
-				FTS_DEBUG("[B]P%d(%d, %d)[p:%d,tm:%d] DOWN!",
-						  events[i].id,
-						  events[i].x, events[i].y,
-						  events[i].p, events[i].area);
+				FTS_DEBUG("[B]P%d DOWN!", events[i].id);
 			}
 #ifdef FTS_XIAOMI_TOUCHFEATURE
 			last_touch_events_collect(events[i].id, 1);
@@ -744,14 +753,16 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 		}
 
 		data->touch_point++;
-		events[i].x = ((buf[FTS_TOUCH_X_H_POS + base] & 0x0F) << 8) +
-					  (buf[FTS_TOUCH_X_L_POS + base] & 0xFF);
-		events[i].y = ((buf[FTS_TOUCH_Y_H_POS + base] & 0x0F) << 8) +
-					  (buf[FTS_TOUCH_Y_L_POS + base] & 0xFF);
+		events[i].x = ((buf[FTS_TOUCH_X_H_POS + base] & 0x0F) << 11) +
+				((buf[FTS_TOUCH_X_L_POS + base] & 0xFF) << 3) +
+				((buf[FTS_TOUCH_PRE_POS + base] & 0xE0) >> 5);
+		events[i].y = ((buf[FTS_TOUCH_Y_H_POS + base] & 0x0F) << 11) +
+				((buf[FTS_TOUCH_Y_L_POS + base] & 0xFF) << 3) +
+				((buf[FTS_TOUCH_PRE_POS + base] & 0x1C) >> 2);
 		events[i].flag = buf[FTS_TOUCH_EVENT_POS + base] >> 6;
 		events[i].id = buf[FTS_TOUCH_ID_POS + base] >> 4;
 		events[i].area = buf[FTS_TOUCH_AREA_POS + base] >> 4;
-		events[i].p =  buf[FTS_TOUCH_PRE_POS + base];
+		events[i].p =  buf[FTS_TOUCH_PRE_POS + base] & 0x03;
 
 		if (EVENT_DOWN(events[i].flag) && (data->point_num == 0)) {
 			FTS_INFO("abnormal touch data from fw");
@@ -1868,6 +1879,32 @@ static void fts_power_status_handler(struct fts_ts_data *ts_data, int value)
 	}
 }
 
+static void fts_enter_doze_status()
+{
+	int ret = 0;
+	int cnt = 3;
+	char value = 0;
+
+	fts_irq_disable_sync();
+	while (cnt) {
+		ret = fts_write_reg(FTS_HT_AFE_COMBO, FTS_HT_ENTER_DOZE);
+		if (ret < 0) {
+			FTS_ERROR("enter doze failed");
+		} else {
+			msleep(30);
+			fts_read_reg(FTS_REG_POWER_MODE, &value);
+			if (value > 0) {
+				FTS_ERROR("enter doze");
+				break;
+			} else {
+				FTS_ERROR("enter doze read fail, try again");
+			}
+		}
+		cnt--;
+	}
+	fts_irq_enable();
+}
+
 static int fts_set_cur_value(int mode, int value)
 {
 	int temp_value;
@@ -1887,6 +1924,10 @@ static int fts_set_cur_value(int mode, int value)
 	}
 	if (mode == Touch_Power_Status && value >= 0) {
 		fts_power_status_handler(fts_data, value);
+		return 0;
+	}
+	if (mode == Touch_Idle_Time && value >= 0) {
+		fts_enter_doze_status();
 		return 0;
 	}
 	/* orientation for IC:
