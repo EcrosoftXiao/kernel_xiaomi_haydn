@@ -866,6 +866,11 @@ int cam_hfi_init(struct hfi_mem_info *hfi_mem, const struct hfi_ops *hfi_ops,
 		CAM_ERR(CAM_HFI,
 			"Reached Max retries. status = %u fw version : [%x]",
 				status, fw_version);
+
+		status =
+			cam_io_r_mb(icp_base + HFI_REG_ICP_HOST_INIT_RESPONSE);
+		if (status != ICP_INIT_RESP_SUCCESS)
+			BUG();
 		goto regions_fail;
 	}
 
