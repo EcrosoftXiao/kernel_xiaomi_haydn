@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/device.h>
@@ -59,7 +60,7 @@ static struct reg_default swr_hap_reg_defaults[] = {
 	{AUTO_RES_CAL_DONE_REG, 0},
 	{SWR_READ_DATA_REG, 0},
 	{SWR_PLAY_REG, 4},
-	{SWR_VMAX_REG, 0},
+	{SWR_VMAX_REG, 100},
 };
 
 enum {
@@ -299,6 +300,13 @@ static int hap_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 
 		swr_slvdev_datapath_control(swr_hap->swr_slave,
 				swr_hap->swr_slave->dev_num, true);
+		rc = swr_hap_enable_hpwr_vreg(swr_hap, true);
+		if (rc < 0) {
+			dev_err(swr_hap->dev, "%s: Enable hpwr_vreg failed, rc=%d\n",
+					__func__, rc);
+			return rc;
+		}
+
 		/* trigger SWR play */
 		val = SWR_PLAY_BIT | SWR_PLAY_SRC_VAL_SWR;
 		rc = regmap_write(swr_hap->regmap, SWR_PLAY_REG, val);
@@ -371,12 +379,13 @@ static int haptics_vmax_put(struct snd_kcontrol *kcontrol,
 }
 
 static const struct snd_kcontrol_new haptics_snd_controls[] = {
-	SOC_SINGLE_EXT("Haptics Amplitude Step", SND_SOC_NOPM, 0, 100, 0,
-		haptics_vmax_get, haptics_vmax_put),
+	SOC_SINGLE_EXT("Haptics Amplitude Step", SND_SOC_NOPM, 0, 255, 0,
+			haptics_vmax_get, haptics_vmax_put),
 };
 
 static const struct snd_soc_dapm_widget haptics_comp_dapm_widgets[] = {
-	SND_SOC_DAPM_INPUT("HAP_IN"),
+	SND_SOC_DAPM_AIF_IN("HAP_IN", "HAPTICS_AIF Playback", 0,
+				SND_SOC_NOPM, 0, 0),
 	SND_SOC_DAPM_MIXER_E("SWR DAC_Port", SND_SOC_NOPM, 0, 0,
 			hap_swr_dac_port, ARRAY_SIZE(hap_swr_dac_port),
 			hap_enable_swr_dac_port,
@@ -491,8 +500,7 @@ static int swr_haptics_probe(struct swr_device *sdev)
 	if (!swr_hap)
 		return -ENOMEM;
 
-	/* VMAX default to 5V */
-	swr_hap->vmax = 100;
+	swr_hap->vmax = 0;
 	swr_hap->swr_slave = sdev;
 	swr_hap->dev = &sdev->dev;
 	pmic_type = (uintptr_t)of_device_get_match_data(swr_hap->dev);

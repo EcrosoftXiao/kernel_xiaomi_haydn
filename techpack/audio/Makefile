@@ -30,6 +30,10 @@ endif
 ifeq ($(CONFIG_ARCH_SA6155), y)
 include $(srctree)/techpack/audio/config/sa6155auto.conf
 endif
+ifeq ($(CONFIG_ARCH_SA6155), y)
+include $(srctree)/techpack/audio/config/sa6155auto.conf
+export
+endif
 endif
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
@@ -42,6 +46,13 @@ LINUXINCLUDE    += \
                 -I$(srctree)/techpack/audio/include/uapi/audio \
                 -I$(srctree)/techpack/audio/include/asoc \
                 -I$(srctree)/techpack/audio/include
+
+#for mius start
+ifeq ($(CONFIG_MIUS_PROXIMITY), y)
+LINUXINCLUDE    += \
+                -I$(srctree)/techpack/audio/include/mius
+endif
+#for mius end
 
 ifeq ($(CONFIG_QTI_QUIN_GVM), y)
 LINUXINCLUDE    += \

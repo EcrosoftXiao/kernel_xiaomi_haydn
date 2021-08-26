@@ -68,6 +68,8 @@ MODULE_PARM_DESC(va_tx_dmic_unmute_delay, "delay to unmute the tx dmic path");
 
 static int va_macro_core_vote(void *handle, bool enable);
 
+static int va_macro_core_vote(void *handle, bool enable);
+
 enum {
 	VA_MACRO_AIF_INVALID = 0,
 	VA_MACRO_AIF1_CAP,

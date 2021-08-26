@@ -5963,6 +5963,13 @@ static struct snd_soc_dai_link msm_auto_fe_dai_links[] = {
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA34,
 		SND_SOC_DAILINK_REG(multimedia34),
 	},
+	{
+		.name = "MSM AFE-PCM TX1",
+		.stream_name = "AFE-PROXY TX1",
+		.dpcm_capture = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(afepcm_tx1),
+	},
 };
 
 static struct snd_soc_dai_link msm_custom_fe_dai_links[] = {
