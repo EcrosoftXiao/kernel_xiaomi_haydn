@@ -851,6 +851,7 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 
 	set_bit(ICNSS_FW_READY, &priv->state);
 	clear_bit(ICNSS_MODE_ON, &priv->state);
+	atomic_set(&priv->soc_wake_ref_count, 0);
 
 	if (priv->device_id == WCN6750_DEVICE_ID)
 		icnss_free_qdss_mem(priv);
@@ -1091,6 +1092,12 @@ static int icnss_event_soc_wake_request(struct icnss_priv *priv, void *data)
 
 	if (!priv)
 		return -ENODEV;
+
+	if (atomic_inc_not_zero(&priv->soc_wake_ref_count)) {
+		icnss_pr_dbg("SOC awake after posting work, Ref count: %d",
+			     atomic_read(&priv->soc_wake_ref_count));
+		return 0;
+	}
 
 	ret = wlfw_send_soc_wake_msg(priv, QMI_WLFW_WAKE_REQUEST_V01);
 	if (!ret)
@@ -1650,6 +1657,36 @@ static void icnss_update_state_send_modem_shutdown(struct icnss_priv *priv,
 	}
 }
 
+static char *icnss_subsys_notify_state_to_str(enum subsys_notif_type code)
+{
+	switch (code) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		return "BEFORE_SHUTDOWN";
+	case SUBSYS_AFTER_SHUTDOWN:
+		return "AFTER_SHUTDOWN";
+	case SUBSYS_BEFORE_POWERUP:
+		return "BEFORE_POWERUP";
+	case SUBSYS_AFTER_POWERUP:
+		return "AFTER_POWERUP";
+	case SUBSYS_BEFORE_AUTH_AND_RESET:
+		return "BEFORE_AUTH_AND_RESET";
+	case SUBSYS_RAMDUMP_NOTIFICATION:
+		return "RAMDUMP_NOTIFICATION";
+	case SUBSYS_POWERUP_FAILURE:
+		return "POWERUP_FAILURE";
+	case SUBSYS_PROXY_VOTE:
+		return "PROXY_VOTE";
+	case SUBSYS_PROXY_UNVOTE:
+		return "PROXY_UNVOTE";
+	case SUBSYS_SOC_RESET:
+		return "SOC_RESET";
+	case SUBSYS_NOTIF_TYPE_COUNT:
+		return "NOTIF_TYPE_COUNT";
+	default:
+		return "UNKNOWN";
+	}
+};
+
 static int icnss_wpss_notifier_nb(struct notifier_block *nb,
 				  unsigned long code,
 				  void *data)
@@ -1660,7 +1697,8 @@ static int icnss_wpss_notifier_nb(struct notifier_block *nb,
 					       wpss_ssr_nb);
 	struct icnss_uevent_fw_down_data fw_down_data = {0};
 
-	icnss_pr_vdbg("WPSS-Notify: event %lu\n", code);
+	icnss_pr_vdbg("WPSS-Notify: event %s(%lu)\n",
+		      icnss_subsys_notify_state_to_str(code), code);
 
 	if (code == SUBSYS_AFTER_SHUTDOWN) {
 		icnss_pr_info("Collecting msa0 segment dump\n");
@@ -1717,7 +1755,8 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 					       modem_ssr_nb);
 	struct icnss_uevent_fw_down_data fw_down_data = {0};
 
-	icnss_pr_vdbg("Modem-Notify: event %lu\n", code);
+	icnss_pr_vdbg("Modem-Notify: event %s(%lu)\n",
+		      icnss_subsys_notify_state_to_str(code), code);
 
 	if (code == SUBSYS_AFTER_SHUTDOWN) {
 		icnss_pr_info("Collecting msa0 segment dump\n");
@@ -2219,17 +2258,23 @@ static int icnss_tcdev_set_cur_state(struct thermal_cooling_device *tcdev,
 	if (!penv->ops || !penv->ops->set_therm_cdev_state)
 		return 0;
 
+	if (thermal_state > icnss_tcdev->max_thermal_state)
+		return -EINVAL;
+
 	icnss_pr_vdbg("Cooling device set current state: %ld,for cdev id %d",
 		      thermal_state, icnss_tcdev->tcdev_id);
 
 	mutex_lock(&penv->tcdev_lock);
-	icnss_tcdev->curr_thermal_state = thermal_state;
 	ret = penv->ops->set_therm_cdev_state(dev, thermal_state,
 					      icnss_tcdev->tcdev_id);
+	if (!ret)
+		icnss_tcdev->curr_thermal_state = thermal_state;
 	mutex_unlock(&penv->tcdev_lock);
-	if (ret)
+	if (ret) {
 		icnss_pr_err("Setting Current Thermal State Failed: %d,for cdev id %d",
 			     ret, icnss_tcdev->tcdev_id);
+		return ret;
+	}
 
 	return 0;
 }
@@ -2675,10 +2720,17 @@ EXPORT_SYMBOL(icnss_get_mhi_state);
 int icnss_set_fw_log_mode(struct device *dev, uint8_t fw_log_mode)
 {
 	int ret;
-	struct icnss_priv *priv = dev_get_drvdata(dev);
+	struct icnss_priv *priv;
 
 	if (!dev)
 		return -ENODEV;
+
+	priv = dev_get_drvdata(dev);
+
+	if (!priv) {
+		icnss_pr_err("Platform driver not initialized\n");
+		return -EINVAL;
+	}
 
 	if (test_bit(ICNSS_FW_DOWN, &penv->state) ||
 	    !test_bit(ICNSS_FW_READY, &penv->state)) {
@@ -2699,10 +2751,12 @@ EXPORT_SYMBOL(icnss_set_fw_log_mode);
 
 int icnss_force_wake_request(struct device *dev)
 {
-	struct icnss_priv *priv = dev_get_drvdata(dev);
+	struct icnss_priv *priv;
 
 	if (!dev)
 		return -ENODEV;
+
+	priv = dev_get_drvdata(dev);
 
 	if (!priv) {
 		icnss_pr_err("Platform driver not initialized\n");
@@ -2726,10 +2780,12 @@ EXPORT_SYMBOL(icnss_force_wake_request);
 
 int icnss_force_wake_release(struct device *dev)
 {
-	struct icnss_priv *priv = dev_get_drvdata(dev);
+	struct icnss_priv *priv;
 
 	if (!dev)
 		return -ENODEV;
+
+	priv = dev_get_drvdata(dev);
 
 	if (!priv) {
 		icnss_pr_err("Platform driver not initialized\n");
@@ -3298,7 +3354,7 @@ static void icnss_wpss_load(struct work_struct *wpss_load_work)
 	struct icnss_priv *priv = icnss_get_plat_priv();
 
 	priv->subsys = subsystem_get("wpss");
-	if (IS_ERR(priv->subsys))
+	if (IS_ERR_OR_NULL(priv->subsys))
 		icnss_pr_err("Failed to load wpss subsys");
 }
 
@@ -3651,6 +3707,8 @@ static int icnss_smmu_fault_handler(struct iommu_domain *domain,
 
 	if (test_bit(ICNSS_FW_READY, &priv->state)) {
 		fw_down_data.crashed = true;
+		icnss_call_driver_uevent(priv, ICNSS_UEVENT_SMMU_FAULT,
+					 &fw_down_data);
 		icnss_call_driver_uevent(priv, ICNSS_UEVENT_FW_DOWN,
 					 &fw_down_data);
 	}
@@ -3895,7 +3953,7 @@ static int icnss_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&priv->event_list);
 
 	priv->soc_wake_wq = alloc_workqueue("icnss_soc_wake_event",
-					    WQ_UNBOUND, 1);
+					    WQ_UNBOUND|WQ_HIGHPRI, 1);
 	if (!priv->soc_wake_wq) {
 		icnss_pr_err("Soc wake Workqueue creation failed\n");
 		ret = -EFAULT;

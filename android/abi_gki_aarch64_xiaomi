@@ -124,3 +124,6 @@ class_remove_file_ns
 class_create_file_ns
 class_remove_file
 class_create_file
+
+# required by incrementalfs.ko
+  revert_creds
