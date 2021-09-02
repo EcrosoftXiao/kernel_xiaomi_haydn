@@ -18,19 +18,19 @@ endif
 
 subdir-ccflags-y += -I$(AUDIO_ROOT)/include/uapi/
 
-obj-y := ipc/
-obj-y += dsp/
-obj-y += dsp/codecs/
-obj-y += soc/
-obj-y += asoc/
-obj-y += asoc/codecs/
+obj-m := ipc/
+obj-m += dsp/
+obj-m += dsp/codecs/
+obj-m += soc/
+obj-m += asoc/
+obj-m += asoc/codecs/
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sdmsteppe))
-obj-y += asoc/codecs/wcd934x/
+obj-m += asoc/codecs/wcd934x/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qcs40x))
-obj-y += asoc/codecs/bolero/
-obj-y += asoc/codecs/csra66x0/
-obj-y += asoc/codecs/ep92/
+obj-m += asoc/codecs/bolero/
+obj-m += asoc/codecs/csra66x0/
+obj-m += asoc/codecs/ep92/
 endif
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), qrbx210))
 obj-m += asoc/codecs/rouleur/
@@ -39,17 +39,17 @@ obj-m += asoc/codecs/wcd937x/
 KBUILD_CFLAGS += -Wno-error
 endif
 ifeq ($(TARGET_SUPPORT), sdmsteppe)
-obj-y += asoc/codecs/bolero/
-obj-y += asoc/codecs/wcd937x/
+obj-m += asoc/codecs/bolero/
+obj-m += asoc/codecs/wcd937x/
 endif
 
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa6155 sa8195 qtiquingvm qtiquingvm8295))
 KBUILD_OPTIONS += CONFIG_SND_SOC_AUTO=y
-obj-y := ipc/
-obj-y += dsp/
-obj-y += asoc/
-obj-y += asoc/codecs/
-obj-y += soc/
+obj-m := ipc/
+obj-m += dsp/
+obj-m += asoc/
+obj-m += asoc/codecs/
+obj-m += soc/
 ifeq ($(TARGET_SUPPORT), $(filter $(TARGET_SUPPORT), sa8155 sa8155ivi sa8195))
 KBUILD_OPTIONS += CONFIG_SND_SOC_SA8155=m
 endif

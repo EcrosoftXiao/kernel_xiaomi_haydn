@@ -3,7 +3,7 @@
 # Makefile for HabanaLabs AI accelerators driver
 #
 
-obj-y	:= habanalabs.o
+obj-m	:= habanalabs.o
 
 habanalabs-y := habanalabs_drv.o device.o context.o asid.o habanalabs_ioctl.o \
 		command_buffer.o hw_queue.o irq.o sysfs.o hwmon.o memory.o \

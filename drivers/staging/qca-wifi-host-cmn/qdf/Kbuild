@@ -29,7 +29,7 @@ INCS += -I$(obj)/$(HOST_CMN_CONVG_PTT)/inc \
         -I$(obj)/$(DEPTH)/cmn_dev/utils/ptt/inc \
         -I$(WLAN_TOP)/pld/inc
 
-obj-y += qdf.o
+obj-m += qdf.o
 
 EXTRA_CFLAGS+= $(INCS) $(COPTS) -Wno-unused-function
 
